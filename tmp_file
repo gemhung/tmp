@@ -1,0 +1,69 @@
+image: nexus.sbisec.int:8442/sec/centos:7.9.2009
+
+variables:
+  GIT_HOST: "https://gitlab-ci-token:${CI_JOB_TOKEN}@m2-mgmt-gitlab01.sbisec.int/"
+  http_proxy: http://m1-sec-nskp-proxy-b.sbisec.int:8080
+  https_proxy: http://m1-sec-nskp-proxy-b.sbisec.int:8080
+  no_proxy: ".sbisec.int,10.32.80.104,localhost,127.0.0.1"
+  XMAKE_ROOT: y
+
+.preparation: &preparation
+  before_script:
+    - eval $(ssh-agent -s)
+    - ssh-add <(echo "$SSH_PRIVATE_KEY")
+    - ssh-add -l
+    - mkdir -p ~/.ssh
+    - echo -e "Host *\n\tStrictHostKeyChecking no\n\tUserKnownHostsFile /dev/null\n\n" > ~/.ssh/config
+    - git config --global http.sslVerify false
+    - wget https://m2-mgmt-gitlab01.sbisec.int/github/third_party/-/raw/master/cmake-3.23.2-linux-x86_64.tar.gz 1>/dev/null 2>&1
+    - tar -xf cmake-3.23.2-linux-x86_64.tar.gz
+    - cd cmake-3.23.2-linux-x86_64/bin && mv * /usr/bin && cd -
+    - cd cmake-3.23.2-linux-x86_64/share && cp -rf * /usr/share && cd -
+    - cmake --version
+    - yum install --nogpgcheck -y -q expat-devel devtoolset-11-gcc-c++ expat-devel
+    - source /opt/rh/devtoolset-11/enable
+    - echo insecure > ~/.curlrc
+    - curl -kOL https://github.com/xmake-io/xmake/releases/download/v2.7.1/xmake-v2.7.1.gz.run
+    - chmod 777 xmake-v2.7.1.gz.run
+    - ./xmake-v2.7.1.gz.run > a.txt
+    - source ~/.xmake/profile
+
+stages:
+  - build
+  - docker
+
+build:
+  <<: *preparation
+  stage: build
+  script:
+    - mkdir build && cd build
+    - cmake ..
+    - make -j 9
+    - make install
+  artifacts:
+    paths:
+      - bin
+    expire_in: 1 week
+  tags:
+    - docker
+    - linux
+
+build_docker:
+  stage: docker
+  image:
+    name: nexus.sbisec.int:8442/docker-secauth/upstream/gcr.io/kaniko-project/executor:v1.8.0-debug
+    entrypoint: [""]
+  script:
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
+    - /kaniko/executor
+        --context ${CI_PROJECT_DIR}
+        --destination ${CI_REGISTRY_IMAGE}:${CI_COMMIT_TAG}
+        --destination ${CI_REGISTRY_IMAGE}:latest
+        --verbosity info
+        --skip-tls-verify
+        --skip-tls-verify-pull
+        --dockerfile ${CI_PROJECT_DIR}/Dockerfile
+  tags:
+    - docker
+    - linux
