@@ -105,12 +105,11 @@ const T ConcurrentQueue<T, SIZE, MAX_SPIN_ON_BUSY>::mEmpty = T{ };
     * If it's intended to run on certain platform. Perhaps we can implmenet it based on the platform (Unix, Windows or MACH)
 
 # What steps would you take to find the bug?
-    * Try to reproduce the bug 
-    * Turn off optimization 
-    * Compile and run wiht `-fsanitize=address` and it shows with `heap-use-after-free` error
-    * The `pop` method is suspecious cause it's return a reference which is not a good idea in multi-thread env. I try to let it return a simple `T`
-    * Cannot reproduce the bug
-    
+* Try to reproduce the bug 
+* Turn off optimization 
+* Compile and run wiht `-fsanitize=address` and it shows with `heap-use-after-free` error
+* The `pop` method is suspecious cause it's return a reference which is not a good idea in multi-thread env. I try to let it return a simple `T`
+* Cannot reproduce the bug    
     
 # If you can find the bug, what fix would you suggest?
 * For now, I can reproduce the segament fault bug immediatly. In my exp, returning a reference in multi-thread env isn't often a good idea. My suggestion is to return a `T` and let compiler do the optimization of `RVO`/`NRVO`. 
